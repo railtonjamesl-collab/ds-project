@@ -1,0 +1,188 @@
+---
+title: "randomforest"
+output:
+  html_document: default
+  pdf_document: default
+date: "2025-10-03"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+In this section of the project we examine technique uses to build a classifier model for detecting fradulent credit card transaction. The data used is provided by https://www.kaggle.com/datasets/mlg-ulb/creditcardfraud. It shows a dataset of credit card transaction occured in two days on September 2013 by European cardholders. This particular data has the benefit of having already gone through preprocessing and PCA has been done to it. Hence most of the preprosessing steps can be skip here. Therefore we can go right into the basic EDA
+
+First we download the data
+
+```{r}
+library(curl)
+library(readr)
+library(tidyverse)
+library(dplyr)
+library(corrplot)
+library(randomForest)
+library(caret)
+library(smotefamily)
+library(pROC)
+zip_url  <- "https://github.com/railtonjamesl-collab/ds-project/raw/main/dataset/archive.zip"
+zip_file <- tempfile(fileext = ".zip")
+
+# 1) Download in binary mode
+curl_download(zip_url, zip_file, mode = "wb")
+
+# 2) List contents to see EXACT internal names
+listing <- unzip(zip_file, list = TRUE)$Name
+print(listing)  # <- check this output to know the exact path(s)
+
+# 3) Auto-pick a CSV inside (first match)
+csvs <- listing[grepl("\\.csv$", listing, ignore.case = TRUE)]
+stopifnot(length(csvs) > 0)  # fail early if no CSVs
+csv_inside <- csvs[1]
+message("Reading CSV inside zip: ", csv_inside)
+
+# 4) Read without extracting
+df <- read_csv(unz(zip_file, csv_inside))
+```
+
+first we explore the surface behaviour of the data set
+```{r}
+summary(df)
+```
+Here we observe that the scale for "Amount" variable is significantly larger than other variable, suggesting that if we were to run methods similar to KNN the data needs to be scale appropriately otherwise the change in "Amount" variable will dominate. Now we look at the correlation
+```{r}
+correlation = cor(df, method = "pearson")
+corrplot(correlation, number.cex = .9, method = "circle", type = "upper", tl.cex=0.5,tl.col = "black")
+```
+Here we can observe that there's little correlation between the variables v1-v28 this is a consequence of PCA. Amount on the otherhands show significant correlation with some of t he variables. 
+```{r}
+table <- table(df$Class)
+table <- as.data.frame(table)
+colnames(table) <- c("class","frequency")
+table$class <- factor(table$class,levels = c("0", "1"),labels = c("No Fraud", "Fraud"))
+ggplot(table, aes(x = class, y = log(frequency), fill = class)) +
+  geom_bar(stat = "identity") +
+  labs(x = "Class", y = " log-Frequency", title = "Fraud vs No Fraud")
+
+```
+Here we can see that even in log scale the number of normal transaction is siginificantly higher than fradulant one, highlighting the imbalance nature of the classification. Therefore classification should be treated with care.
+
+In this part of the project, we will examine the performance of random forest method in classification task on fraud detection using the credit card fraud data. Here we will follow directly the approach used by Gabriel Preda original found in https://www.kaggle.com/code/nschneider/gbm-vs-xgboost-vs-lightgbm. Here I reduced the number of tree he used from 100 to 5 for the sake of time. As the goal is to examine general uses of the method
+
+First initialised the data train and test data using random sampling, splitting the train and test data into 70/30 ratio
+
+```{r}
+set.seed(677)
+train.test.split <- sample(2
+	, nrow(df)
+	, replace = TRUE
+	, prob = c(0.7, 0.3))
+trainset = df[train.test.split == 1,]
+verset = df[train.test.split == 2,]
+
+trainset$Class <- factor(trainset$Class)
+verset$Class   <- factor(verset$Class)
+```
+
+here the mnodel is train using 100 deicision tree
+```{r}
+n <- names(trainset)
+rf.form <- as.formula(paste("Class ~", paste(n[!n %in% "Class"], collapse = " + ")))
+trainset.rf <- randomForest(rf.form,trainset,ntree=5,importance=T)
+```
+
+```{r}
+
+pred_class <- predict(trainset.rf, newdata = verset, type = "class")
+cm <- confusionMatrix(data = pred_class, reference = verset$Class)
+cm
+```
+ROC curve is used to examine the true positive rate against false positive. Here ROC is used mainly to compute AUC (Area under the ROC curve) which is a commonly use metric for measuring the performance of the binary classification model.
+```{r}
+rf_prob <- predict(trainset.rf, newdata = verset, type = "prob")
+roc_obj <- roc(verset$Class, rf_prob[,2])
+plot(roc_obj, lwd = 2, main = "ROC - Random Forest (Classification)")
+auc(roc_obj)
+
+
+```
+
+In the original approach the method of sampling used were random sample. Given the heavily skewed property of the data (large number of non fraud compares to fraud) the resulting classifier will be heavily bias in favor of the non fraud result, Hence to compensate for this we examine methods such as smote described in https://en.wikipedia.org/wiki/Synthetic_minority_oversampling_technique. I'll be using 100 tree for each test, to make the result less prone to biases.
+
+First i rescale the the data as smote use KNN method for sampling which is sensitive to scale.
+```{r}
+
+
+# Scale only numeric columns
+  df[, !(names(trainset) == "Class")] <- scale(df[, !(names(trainset) == "Class")])
+  
+  # Display the first few rows of the dataset to verify
+  head(df)
+
+```
+
+here the test is split into
+```{r}
+set.seed(677)
+train.test.split <- sample(2
+	, nrow(df)
+	, replace = TRUE
+	, prob = c(0.7, 0.3))
+trainset = df[train.test.split == 1,]
+verset = df[train.test.split == 2,]
+
+#randomForest need factor variable otherwise linear regression
+trainset$Class <- factor(trainset$Class)
+verset$Class   <- factor(verset$Class)
+```
+
+Here is the random sampling training
+```{r}
+n <- names(trainset)
+rf.form <- as.formula(paste("Class ~", paste(n[!n %in% "Class"], collapse = " + ")))
+trainset.rf <- randomForest(rf.form,trainset,ntree=100,importance=T)
+
+```
+
+Here is the smote"-ed" training set
+```{r}
+trainset_smote <- trainset[,!(names(trainset) == "Class")]
+trainset_scaled <- SMOTE(trainset_smote, trainset$Class)
+trainset_smote <- trainset_scaled$data
+trainset_smote$class <- factor(trainset_smote$class)
+```
+
+training using smote sampling
+```{r}
+n<- names(trainset_smote)
+rf.form_smote <- as.formula(paste("class ~", paste(n[!n %in% "class"], collapse = " + ")))
+trainset.rf_smote <- randomForest(rf.form_smote,trainset_smote,ntree=100,importance=T)
+
+```
+here is the compision
+```{r}
+#prediction for no smote sampling
+pred_class <- predict(trainset.rf, newdata = verset, type = "class")
+cm <- confusionMatrix(data = pred_class, reference = verset$Class)
+print(cm$table)
+#prediction for smote sampling
+pred_class_smote <- predict(trainset.rf_smote, newdata = verset, type = "class")
+cm_smote <- confusionMatrix(data = pred_class_smote, reference = verset$Class)
+print(cm_smote$table)
+```
+
+```{r}
+rf_prob <- predict(trainset.rf, newdata = verset, type = "prob")
+roc_obj <- roc(verset$Class, rf_prob[,2])
+print(paste(auc(roc_obj), "auc value for randomsampling"))
+
+
+rf_prob_smote <-predict(trainset.rf_smote, newdata=verset, type = "prob")
+roc_obj_smote <- roc(verset$Class, rf_prob_smote[,2])
+print(paste(auc(roc_obj_smote),"auc value for smote sampling"))
+
+plot(roc_obj, col = "blue", lwd = 2, main = "ROC Curve Comparison")
+lines(roc_obj_smote, col = "red", lwd = 2, lty = 2)
+legend("bottomright", legend = c("ROC for random sampling", "ROC for smote sampling"), fill = c("blue","red"))
+```
+
+Here we can see that smote-sampling slightly improves the preditability perforamance of the model accorrding to the metric AUC. However, this come at a cost of having a model that may not reflects reala scenario as the samples were mutated in such a way to compensate for the imbalance of fraudulant and normal transaction
