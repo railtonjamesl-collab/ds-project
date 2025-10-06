@@ -167,21 +167,12 @@ corr_mat <- round(cor(numdata, use = "pairwise.complete.obs"), 2)
 melted_corr_mat <- as.data.frame(as.table(corr_mat))
 names(melted_corr_mat) <- c("Var1","Var2","value")
 
-ggplot(data = melted_corr_mat, aes(x=Var1, y=Var2,
-                                   fill=value)) +
-  labs(title = "Correlation Heatmap of PaySim Variables", fill = "Correlation") +
-geom_tile() + theme(
-    axis.text.x = element_text(angle = 45, hjust = 1, size = 10),
-    axis.text.y = element_text(size = 10)
-  ) +
-geom_text(aes(Var2, Var1, label = value),
-          color = "black", size = 4)
+ggplot(data = melted_corr_mat, aes(x=Var1, y=Var2,fill=value)) + labs(title = "Correlation Heatmap of PaySim Variables", fill = "Correlation") + geom_tile() + theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 10), axis.text.y = element_text(size = 10)) +geom_text(aes(Var2, Var1, label = value),color = "black", size = 4)
 ```
 As we can see, most of the variables do not have a strong correlation between them with the exception of oldbalanceDest and newbalanceDest, which is unsurprising.
 
 We can now move on to using logistic regression on this data set. We will use concepts and code snippets from https://www.r-bloggers.com/2019/11/logistic-regression-in-r-a-classification-technique-to-predict-credit-card-default/ and https://www.kaggle.com/code/mahmoud86/logistic-regression-simulation.
 
-[TALK ABOUT TYPES OF FRAUD WITH THIS STUFF]
 
 When running this code initially, the vast number of observations made it too computationally expensive to run the logistic regression on the entire data set, hence we have limited the observations so the code can be ran in a timely manner. This will make it so the results will lose some accuracy, but is needed for the computational aspect of this assessment all whilst still allowing us to make valuable inferences.
 
