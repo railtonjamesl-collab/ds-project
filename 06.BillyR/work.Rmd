@@ -167,7 +167,7 @@ corr_mat <- round(cor(numdata, use = "pairwise.complete.obs"), 2)
 melted_corr_mat <- as.data.frame(as.table(corr_mat))
 names(melted_corr_mat) <- c("Var1","Var2","value")
 
-ggplot(data = melted_corr_mat, aes(x=Var1, y=Var2,fill=value)) + labs(title = "Correlation Heatmap of PaySim Variables", fill = "Correlation") + geom_tile() + theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 10), axis.text.y = element_text(size = 10)) +geom_text(aes(Var2, Var1, label = value),color = "black", size = 4)
+ggplot(data = melted_corr_mat, aes(x=Var1, y=Var2,fill=value)) + labs(title = "Correlation table of  Variables", fill = "Correlation") + geom_tile() + theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 10), axis.text.y = element_text(size = 10)) +geom_text(aes(Var2, Var1, label = value),color = "black", size = 4)
 ```
 As we can see, most of the variables do not have a strong correlation between them with the exception of oldbalanceDest and newbalanceDest, which is unsurprising.
 
