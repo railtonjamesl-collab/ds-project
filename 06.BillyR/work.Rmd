@@ -185,7 +185,7 @@ sample_rows <- sample(nrow(test_data), 600000)
 sampled_test_data <- test_data[sample_rows, ]
 ```
 
-Now that we have our sampled our test data, we can split the data for training and testing, which can be used for evaluation. We will consider a 70/30 split. This means that 70% of our sampled data is used for training and 30% for testing.
+Now that we have our sampled our test data, we can split the data for training and testing, which can be used for evaluation. We will consider a 70/30 split. This means that 70% of our sampled data is used for training and 30% for  
 
 ```{r logistic regression split}
 set.seed(2)
@@ -204,6 +204,7 @@ We can see the 70/30 split from this quite confidently. We will now create a log
 glm.fit <- glm(isFraud ~ ., data = sampled_test_data, family = binomial)
 summary(glm.fit)
 ```
+Here we see that all the covariates are majorly significant to predicting whether a transaction is fraud or not, with an AIC = 37213. The AIC figure is of use for future comparisons of other models.
 We can use some evaluation techniques to see how accurate our model is, such as the confusion matrix.
 
 ```{r evaluation}
@@ -218,4 +219,11 @@ We can then compute our accuracy using a simple formula.
 accuracy <- table(glm.pred, sampled_test_data$isFraud)
 sum(diag(accuracy))/sum(accuracy)
 ```
-What we are seeing is that the values on the diagonal of the confusion matrix are "correct" predictions, whilst the off diagonal elements are "incorrect" predictions. We see then that our model has an accuracy of 93%. Since we are using a synthetic data set, this number could be attributed to the fact that the data is inherently "nice" for that purpose. Even so, the logistic regression model does seem to fit our data quite well.
+What we are seeing is that the values on the diagonal of the confusion matrix are "correct" predictions, whilst the off diagonal elements are "incorrect" predictions. We see then that our model has an accuracy of 93%. Since we are using a synthetic data set, this number could be attributed to the fact that the data is inherently "nice" for that purpose. Even so, the logistic regression model does seem to fit our data quite well. For future work, we could implement more machine learning techniques such as random forest, xgboost etc. and then evaluate using methods such as AUC/ROC.
+
+References:
+https://www.kaggle.com/code/alicenyms/eda-and-imbalanced-dataset-techniques
+https://www.kaggle.com/code/xiaoyuezhou/eda-on-dataset-for-fraud-detection
+https://www.r-bloggers.com/2019/11/logistic-regression-in-r-a-classification-technique-to-predict-credit-card-default/
+https://www2.cs.uregina.ca/~dbd/cs831/notes/confusion_matrix/confusion_matrix.html
+https://r4ds.hadley.nz/
