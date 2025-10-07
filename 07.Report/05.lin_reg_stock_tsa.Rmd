@@ -36,7 +36,7 @@ Here, we load the CSV file and look at the initial structure of the data.
 
 ```{r}
 #read the file 
-data <- read.csv("../dataset/finance_economics_dataset.csv")
+data <- read.csv("https://media.githubusercontent.com/media/railtonjamesl-collab/ds-project/refs/heads/main/dataset/finance_economics_dataset.csv")
 str(data)
 ```
 
