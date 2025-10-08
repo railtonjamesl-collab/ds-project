@@ -1,0 +1,85 @@
+# Installed tidyquant package and ggplot2
+
+# Apple stock prices from Yahoo Finance
+apple_stock <- tq_get("AAPL")
+head(apple_stock)
+
+# S&P 500
+SP <- tq_get("^GSPC")
+
+# Plotting Apple Stock with S&P 500
+par(mar = c(5, 5, 2, 5))
+plot(adjusted ~ date, data=SP, type = "l", col = "red",
+     ylab = "S&P500 index",
+     xlab = "Date")
+par(new = T)
+plot(adjusted ~ date, data=apple_stock, 
+     type = "l", axes = F, xlab = NA, ylab = NA)
+axis(side = 4)
+mtext(side = 4, line = 3, "Apple stock price")
+legend("topleft",
+       legend=c("S&P500", "Apple"),
+       lty = 1, col = c("red", "black"))
+
+
+# Looking at the fluctuation of prices
+apple_range = apple_stock$high - apple_stock$low
+
+plot(apple_range ~ apple_stock$date, type="h", xlab="Date", ylab="Price Range", col="blue")
+
+highest_diff = which.max(apple_range)
+highest_diff
+highest_diff_date = apple_stock$date[highest_diff]
+highest_range = apple_range[highest_diff]
+
+points(highest_diff_date, highest_range, col="red", pch=19)
+
+
+# Technical Analysis
+
+nvidia <- tq_get("NVDA", get = "stock.prices", from = "2024-09-01", to = Sys.Date())
+
+# Line plot of closing price
+ggplot(nvidia, aes(x = date, y = close)) +
+  geom_line() +
+  labs(x = "",
+       y = "Closing Price") +
+  theme_tq()
+
+ggplot(nvidia, aes(x = date, y = close)) +
+  geom_candlestick(aes(open = open, high = high, low = low, 
+                       close = close)) +
+  coord_x_date(xlim = c("2025-09-06", "2025-10-06"),
+              ylim = c(170, 180)) +
+  labs(y = "Closing Price", x = "") + 
+  theme_tq()
+
+
+# Candlestick plot for last 30 days
+nvidia %>%
+  tail(30) %>%
+  ggplot(aes(x = date, y = close)) +
+  geom_candlestick(aes(open = open, high = high, low = low, close = close)) +
+  labs(x = "",
+       y = "Price") +
+  theme_tq()
+
+# Line plot with moving averages
+ggplot(nvidia, aes(x = date, y = close)) +
+  geom_line() +
+  geom_ma(ma_fun = SMA, n = 30, linetype = 1) +
+  labs(title="NVIDIA Moving Averages", y = "Closing Price", x = "") + 
+  theme_tq()
+
+# Bollinger bands
+ggplot(nvidia, aes(x = date, y = close, open = open,
+             high = high, low = low, close = close)) +
+  geom_line() +
+  geom_bbands(ma_fun = SMA, sd = 2, n = 30,
+              linetype = 2, size = 0.5, alpha = 0.2,
+              fill = palette_light()[[1]],
+              color_bands = palette_light()[[1]],
+              color_ma = palette_light()[[2]]) +
+  labs(title="NVIDIA MA with Bollinger Bands", y = "Closing Price", x = "") +
+  theme_tq()
+

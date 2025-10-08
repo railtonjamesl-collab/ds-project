@@ -1,0 +1,161 @@
+---
+title: "Group Project 0"
+author: "Adlan"
+date: "2025-10-04"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Here, we are trying to predict the closing price of stocks using a linear regression.
+
+Firstly, let's setup the key packages needed.
+
+```{r}
+# This R environment comes with many helpful analytics packages installed
+# It is defined by the kaggle/rstats Docker image: https://github.com/kaggle/docker-rstats
+# For example, here's a helpful package to load
+
+library(tidyverse) # metapackage of all tidyverse packages
+library(pheatmap)
+library(car)
+library(lmtest)
+
+# Input data files are available in the read-only "../input/" directory
+# For example, running this (by clicking run or pressing Shift+Enter) will list all files under the input directory
+
+list.files(path = "../input")
+
+# You can write up to 20GB to the current directory (/kaggle/working/) that gets preserved as output when you create a version using "Save & Run All" 
+# You can also write temporary files to /kaggle/temp/, but they won't be saved outside of the current session
+```
+
+Here, we load the CSV file and look at the initial structure of the data.
+
+```{r}
+#read the file 
+data <- read.csv("https://media.githubusercontent.com/media/railtonjamesl-collab/ds-project/refs/heads/main/dataset/finance_economics_dataset.csv")
+str(data)
+```
+
+Now, let's ensure that we do not have any blank entries or NAs.
+
+```{r}
+#Check the # NAs for each column, and notice that we don't have any.
+col_na <- colSums(is.na(data))
+paste("The no. of NAs is:", sum(col_na[col_na > 0]))
+```
+
+Let's now convert data like the stock index or time to numbers so that we can actually use them in calculations.
+
+```{r}
+#Transform both categorical column "Stock.index", and time-data "Date" to integer
+# store it to reuse later for certain functions
+Stock.Index <- data$Stock.Index
+
+data$Stock.Index <- as.integer(as.factor(data$Stock.Index))
+data$Date <- as.integer(as.factor(data$Date))
+```
+
+One useful step is to look at how the data is correlated. As expected, our opening price, closing price, daily high and daily low are all perfectly correlated.
+
+```{r}
+#Check their correlation matrix:
+#As expected, all 4 Open.Price, Close.Price, Daily.High, Daily.Low are all (perfectly) positively correlated with one another.
+cor.matrix <- cor(data)
+pheatmap(cor.matrix, display_numbers = TRUE,
+         show_colnames = FALSE, cluster_rows = FALSE, cluster_cols = FALSE)
+
+```
+
+Now, let's split the data in to a training set (70%) and a testing set (30%).
+
+```{r}
+# cross validation (70/30)
+set.seed(500)
+
+# convert Stock.Index back to a factor
+data$Stock.Index <- as.factor(Stock.Index)
+
+samp <- sample(1:nrow(data), floor(0.7 * nrow(data)), replace = FALSE)
+X_train <- data[samp, ] %>% select(-"Close.Price")
+Y_train <- data[samp, "Close.Price"]
+X_test <- data[-samp, ] %>% select(-"Close.Price")
+Y_test <- data[-samp, "Close.Price"]
+```
+
+Here, we create our initial regression. 
+
+```{r}
+#We first fit a linear regression model using all predictors.
+fit.full <- lm(Y_train ~ ., data=X_train)
+summary(fit.full)$adj.r.squared
+```
+
+Adjusted R squared is very high, we'll try looking at other metrics too. We now perform all of backward elimination, forward selection, and stepwise regression, to both get rid of predictors with high p-values and minimize our AIC values.
+
+```{r}
+# define intercept model
+fit.simple <- lm(Y_train ~ 1, data=X_train)
+
+fit.backward <- stats::step(fit.full, direction = "backward", trace=0)
+fit.forward <- stats::step(fit.simple, scope=list(upper=fit.full, lower=fit.simple),
+                          direction = "forward", trace=0)
+fit.stepwise <- stats::step(fit.simple, scope=list(upper=fit.full, lower=fit.simple),
+                          direction = "both", trace=0)
+
+data.frame(AIC = c(extractAIC(fit.backward)[2], extractAIC(fit.forward)[2], extractAIC(fit.stepwise)[2]),
+          row.names = c("Backward Elimination", "Forward Selection", "Stepwise Regression"))
+```
+
+It turns out that they all yielded the same model. We now are left with only 8 predictors (including the intercept).
+
+```{r}
+summary(fit.stepwise)$coefficients
+```
+
+We will check if there are any problems with multicollinearity, using VIF.
+
+```{r}
+data.frame(vif(fit.stepwise))
+```
+
+The high VIF values are understandable as we know they are perfectly correlated. Let's move and check their MSE and MSPE.
+
+We can validate the model as the values are close to one another
+
+```{r}.
+MSE <- anova(fit.stepwise)["Residuals", "Mean Sq"]
+Y_pred <- predict(fit.stepwise, newdata=data.frame(X_test), type="response")
+MSPE <- mean((Y_pred - Y_test)^2)
+
+data.frame(MSE = MSE, MSPE = MSPE)
+```
+
+Check their residual plot and histogram of residuals. Also check the Normal QQ plot.
+
+
+The randomly scattered residual plot suggests that linearity was not violated. This histogram of residuals seems to also suggest that homodascity and normality was not violated, though we will check using the BP test and Shapiro Wilk test accordingly. Normal QQ plot also suggests normality.
+
+```{r}
+ggplot(data=NULL, aes(x=fit.stepwise$fitted.values, y=fit.stepwise$residuals)) + geom_point()
+ggplot(data=NULL, aes(x=fit.stepwise$residuals)) + geom_histogram(bins = 35)
+qqnorm(fit.stepwise$residuals)
+qqline(fit.stepwise$residuals)
+```
+
+Both p-values are very low, indicating both equal constant variance and linearity assumption respectively were not violated.
+
+```{r}
+bptest(fit.stepwise, studentize=FALSE)
+stats::shapiro.test(fit.stepwise$residuals)
+```
+
+Durbin-Watson test indicates some autocorrelation between residuals, though not significantly.
+
+```{r}
+dwtest(fit.stepwise)
+```
+
