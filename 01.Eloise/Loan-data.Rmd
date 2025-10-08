@@ -8,27 +8,245 @@ date: "2025-10-07"
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-## R Markdown
+## Introduction
 
-In this section we will be using some loan data from https://www.kaggle.com/datasets/taweilo/loan-approval-classification-data?resource=download by performing some exploratory data analysis techniques on this data set. This is a sythetic data set which provides information on individuals along with their loan status (approved or rejected).
+In this section we will be using some loan data from https://www.kaggle.com/datasets/taweilo/loan-approval-classification-data?resource=download by performing some exploratory data analysis techniques on this data set. This is a synthetic data set which provides information on individuals along with their loan status (approved or rejected). For more information about the dataset go to the link above. I have read and modified code from https://www.kaggle.com/code/sap379/loan-approval-classification/notebook in this document. The file / is the full original code.
 
+We will start by loading any required libraries and reading the data.
 
-```{r Libraries}
+```{r Libraries, message=FALSE}
 library(tidyverse)
 library(Hmisc)
+library(scales)
+library(corrplot)
+library(rpart)
+library(rpart.plot)
+library(caret)
 ```
 
 ```{r Data}
-loan <- read_csv("~/University of Bristol/Semester 1/Data Science Toolbox/Assessments/Assessment 0/ds-project/dataset/loan_data.csv", col_types ="nffnnfnfnnnnff")
-head(loan,10)
+loan <- read_csv("../dataset/loan_data.csv", col_types ="nffnnfnfnnnnff")
 ```
 
-## Including Plots
+## Summary Statistics
 
-You can also embed plots, for example:
+First we will explore some summary statistic of the whole data set:
 
-```{r pressure, echo=FALSE}
+```{r Summary, message=FALSE}
+# View the first 10 rows of the data frame 
+head(loan, 10)
+
+# Gives the dimensions of the data frame
+dim(loan)
+
+# Structure of data 
+str(loan)
+
+# Summary of the whole data
+summary(loan)   
+
+# Summary of the numeric data
+loan %>% keep(is.numeric) %>% summary()
+
+# Summary of the catagorical data
+loan %>%  keep(is.factor) %>%  summary()  ### summary of factors variables
+```
+
+## Visulalisation
+
+### Count Data
+
+Below shows a histograms of the numeric variables 
+
+```{r Histogram, figure-side, fig.show='hold', out.width="33%", message=FALSE}
+ggplot(loan, aes(x=person_income)) + 
+  geom_histogram(position="identity", fill = "lightgreen", col = "white")+
+  scale_x_continuous(labels = label_number())
+
+ggplot(loan, aes(x=person_age, colour = "white")) + 
+  geom_histogram(position="identity", fill = "lightgreen", col = "white")
+
+ggplot(loan, aes(x=person_emp_exp, colour = "white")) + 
+  geom_histogram(position="identity", fill = "lightgreen", col = "white")
+
+ggplot(loan, aes(x=loan_amnt, colour = "white")) + 
+  geom_histogram(position="identity", fill = "lightgreen", col = "white")
+
+ggplot(loan, aes(x=loan_int_rate, colour = "white")) + 
+  geom_histogram(position="identity", fill = "lightgreen", col = "white")
+
+ggplot(loan, aes(x=loan_percent_income, colour = "white")) + 
+  geom_histogram(position="identity", fill = "lightgreen", col = "white")
+
+ggplot(loan, aes(x=cb_person_cred_hist_length, colour = "white")) + 
+  geom_histogram(position="identity", fill = "lightgreen", col = "white")
+
+ggplot(loan, aes(x=credit_score, colour = "white")) + 
+  geom_histogram(position="identity", fill = "lightgreen", col = "white")
 
 ```
 
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+The first three histograms showing the variables person_income, person_age and person_emp_exp do not tell us much about any trends in this variable as the majority of the data in the lower bins but there is a few data points that are much higher. in order to gain insight on this variable we will reduce the data to those observations in the most populated bins and then create a histogram of this data. This is shown below:
+
+```{r Histogram 2, figure-side, fig.show='hold', out.width="33%", message=FALSE}
+# Check where to cut the data of by finding the percentage of data that is still left - don't want to reduce it too much.
+(count(subset(loan, person_income <= 400000))/count(loan))*100
+(count(subset(loan, person_age < 60))/count(loan))*100
+(count(subset(loan, person_emp_exp < 40))/count(loan))*100
+
+# These cut off points still show over 99% of the data but avoid using the extreme values
+
+ggplot(subset(loan, person_income <= 400000), aes(x=person_income)) + 
+  geom_histogram(position="identity", fill = "lightgreen", col = "white", bins = 20) +
+  scale_x_continuous(labels = label_number())
+
+ggplot(subset(loan, person_age < 100), aes(x=person_age)) +
+  geom_histogram(position = "identity", fill = "lightgreen", col = "white", bins = 20)
+
+ggplot(subset(loan, person_emp_exp < 40), aes(x=person_emp_exp)) +
+  geom_histogram(position = "identity", fill = "lightgreen", col = "white")
+```
+
+Trends all of the histograms for numerical data show that most of the people applying for a loan tend to be:
+
+* Early on in their career 
+* High credit score
+* Have less than 10 years credit history
+* Earn between £40k and £80k a year 
+* Between 20 and 30
+
+There is no trend showing for the loan amount and the initial loan rate, however it shows that generally the loan amount is a lower percentage of the person's income. 
+
+
+Below shows bar charts of the categorical data
+
+```{r Barcharts, figures-side, fig.show="hold", out.width="33%", message=FALSE}
+
+ggplot(loan, aes(x=person_gender)) + geom_bar(stat="count", fill = "lightgreen", col = "white")
+
+ggplot(loan, aes(x=person_education)) + geom_bar(stat="count", fill = "lightgreen", col = "white")
+
+ggplot(loan, aes(x=person_home_ownership)) + geom_bar(stat="count", fill = "lightgreen", col = "white")
+
+ggplot(loan, aes(x=loan_intent)) + geom_bar(stat="count", fill = "lightgreen", col = "white")
+
+ggplot(loan, aes(x=previous_loan_defaults_on_file)) + geom_bar(stat="count", fill = "lightgreen", col = "white")
+
+```
+
+These bar charts show a pretty even spread between all catagprical data.
+
+### Correlation
+
+Below the data down to just the numerical data and looks at the correlation between these variables.
+```{r Correlation, message=FALSE}
+loan_numeric <- select_if(loan, is.numeric)
+correlation <- cor(loan_numeric, method = "pearson")
+corrplot(correlation, number.cex = .9, method = "circle", type = "upper", tl.cex=0.5,tl.col = "black")
+```
+
+Here we can see that there are several varaibles that are strongly correlated. These are person age, the number of years of employment experience that they have and the umber of years of credit history they have. This is to be expected as age limits how both of these other variables. Also note that a persons income is ever so slightly negatively correlated with the loan percentage amount. 
+
+## Data Cleaning
+
+As seen earlier, there are some extreme outlilers in the variables person_age, person_income and person_emp_exp so these should be removed before modelling. Instead of using plots to decide where the outliers are, we will use the interquartile range. outliers will be classed as anything 1.5 x the interquatile higher than the third quartile. 
+
+```{r outliers, message=FALSE}
+higher_fence <- function(data) {
+  Q <- quantile(data, probs = 0.75)
+  IQR <- IQR(data)
+  higher_fence <- Q + 1.5*IQR
+  return(higher_fence)
+}
+
+higher_fence_age <- higher_fence(loan$person_age)
+higher_fence_income <- higher_fence(loan$person_income)
+higher_fence_emp_exp <- higher_fence(loan$person_emp_exp)
+
+loan_original <- loan
+
+loan <- loan %>% mutate(person_age =ifelse(person_age > higher_fence_age, NA, person_age)) %>% 
+  mutate(person_income =ifelse(person_income > higher_fence_income, NA, person_income)) %>% 
+  mutate(person_emp_exp =ifelse(person_emp_exp > higher_fence_emp_exp, NA, person_emp_exp))
+
+# Review how many NAs that has added to the data
+
+sapply(loan, function(x) sum(is.na(x)))
+
+sum(is.na(loan))
+
+# Remove variables no longer needed
+
+rm(higher_fence, higher_fence_age, higher_fence_emp_exp, higher_fence_income)
+```
+
+This has not added too many NAs to the data so I do not think they need removing.
+
+Below are boxplots of the above three variables with outliers removed using the above method (on the left) and the original data (on the right).
+
+```{r Boxplot outlier rm, figures-side, fig.show='hold', out.width="50%", message = FALSE}
+loan %>% ggplot(aes(person_income)) + scale_y_log10() + 
+  geom_boxplot(outlier.shape = 3, outlier.color = "red", fill = "lightgreen", color = "darkgreen")
+loan_original %>% ggplot(aes(person_income)) + scale_y_log10() +
+  geom_boxplot(outlier.shape = 3, outlier.colour = "red", fill = "lightgreen", color = "darkgreen")
+
+loan %>% ggplot(aes(person_age)) + scale_y_log10() + 
+  geom_boxplot(outlier.shape = 3, outlier.color = "red", fill = "lightgreen", color = "darkgreen")
+loan_original %>% ggplot(aes(person_age)) + scale_y_log10() +
+  geom_boxplot(outlier.shape = 3, outlier.colour = "red", fill = "lightgreen", color = "darkgreen")
+
+loan %>% ggplot(aes(person_emp_exp)) + scale_y_log10() + 
+  geom_boxplot(outlier.shape = 3, outlier.color = "red", fill = "lightgreen", color = "darkgreen")
+loan_original %>% ggplot(aes(person_emp_exp)) + scale_y_log10() +
+  geom_boxplot(outlier.shape = 3, outlier.colour = "red", fill = "lightgreen", color = "darkgreen")
+```
+
+From these, we can observe that the distribution of these variables now has a smaller spread after taking out the extreme values. This may be advantageous when modelling.
+
+## Model Building
+
+First when buidling a model the data needs to be split into a training data set and a test data set. We will then look at the porportion of loans accepted and loans rejected both of these data sets and the whole data set.
+
+```{r data split, message=FALSE}
+set.seed(1234)
+sample_index <- sample(nrow(loan), round(nrow(loan) * .75), replace = FALSE)
+
+train_data <- loan[sample_index, ]
+test_data <- loan[-sample_index, ]
+
+round(prop.table(table(select(loan, loan_status))), 2)
+
+round(prop.table(table(select(train_data, loan_status))), 2)
+
+round(prop.table(table(select(test_data, loan_status))), 2)
+```
+
+### Rpart Model
+
+The model then needs to be trained using the following code:
+
+```{r train, message=FALSE}
+loan_mod <- rpart(loan_status ~ ., method = "class", data = train_data)
+```
+
+Below shows a decision tree visualisation of this model.
+
+```{r rpart tree, message=FALSE}
+rpart.plot(loan_mod)
+```
+
+This model is then used to make preditions on the test data set.
+
+```{r rpart pred, message=FALSE}
+loan_pred <- predict(loan_mod,test_data, type = "class")
+```
+
+### Model Evaluation 
+
+Performance measures for this model can be seen below:
+
+```{r model eval, message=FALSE}
+confusionMatrix(loan_pred, test_data$loan_status)
+```
+
+These measures show this is fairly accurate model and should perform highly.
